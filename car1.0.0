@@ -1,0 +1,231 @@
+#include <reg52.h>
+#include <math.h>
+
+#define DISTANCE 100  //调试值1：超声波反应距离
+#define RATE     100  //调试值2: PWM频率
+#define STOP	 1000
+
+typedef unsigned char uchar;
+typedef unsigned int uint;
+ 
+sbit sensor1 = P3^0; //光电管1
+sbit sensor2 = P3^1; //光电管2
+sbit sensor3 = P3^2; //光电管3
+sbit sensor4 = P3^3; //光电管4
+
+sbit lMotor1 = P2^0; //左电机1
+sbit lMotor2 = P2^1; //左电机2
+sbit rMotor1 = P2^2; //右电机1
+sbit rMotor2 = P2^3; //右电机2
+
+sbit echo = P0^0;  //信号
+sbit trig = P0^1;  //1
+
+sbit reed = P0^2;  //干簧管
+
+uint zkb_left, zkb_right, rate=RATE;
+uint flag = 0;//干簧管标志
+uint i = 0;//延时累加器
+uint j = 0;
+
+void Timer0Init()
+{
+	TMOD |= 0X01;
+	//设定初值
+	TH0 = 0XFC;
+	TL0 = 0X18;	 
+	ET0 = 1;
+	EA = 1;
+	TR0 = 1;
+}
+
+void Timer1Init()
+{
+	TMOD |= 0X10;
+	//设定初值
+	TH1 = 0;
+	TL1 = 0;	 
+	ET1 = 0;
+	EA = 1;
+	TR1 = 0;
+}
+
+float get_distance()
+{
+	float distance;
+	TMOD |= 0X01;
+	TH1 = 0;
+	TL1 = 0;
+	trig = 1;
+	i =	0;
+	while(i<=11);
+	trig = 0;
+	while(echo == 0);
+	TR1 = 1;
+	while(echo == 1);
+	TR1 = 0;
+	TH1 = 0;
+	TL1 = 0;
+	distance = (TH1*256+TL1)*1.87/100;
+	return distance;		
+
+}
+
+void go_straight()
+{
+	zkb_left = 90;
+	zkb_right = 90;
+}
+
+void turnleft()
+{
+	zkb_left = 30;
+	zkb_right = 90;
+}
+void turnright()
+{
+	zkb_left = 90;
+	zkb_right = 30;
+}
+void fastturnright()
+{
+	zkb_left = 90;
+	zkb_right = -30;
+}
+void fastturnleft()
+{
+	zkb_left = -30;
+	zkb_right = 90;
+}
+
+
+int reedSwitch()
+{
+	if(reed == 0 && flag == 0)
+	{
+		i = 0;
+		while(i <= 1);
+		if(reed == 0)
+		{
+			flag = 1;
+			return 1;
+		}
+	}
+	else if(reed == 1)
+		flag = 0;
+	return 0;
+}
+void main()
+{
+	Timer0Init();
+	Timer1Init();
+	while(1)
+	{
+		if(get_distance() > DISTANCE)	//调试数据1
+		{
+			break;
+		}	
+	}
+		TH1 = 0XFF;
+		TL1 = 0XFF;
+		ET1 = 1;
+	while(1)
+	{
+
+		if(sensor1==0&&sensor2==0&&sensor3==0&&sensor4==0)
+		{
+		 	go_straight();
+		}
+		else if(sensor1==0&&sensor2==1&&sensor3==0&&sensor4==0)
+		{
+		 	turnright();
+		}
+		else if(sensor1==0&&sensor2==0&&sensor3==1&&sensor4==0)
+		{
+		 	turnleft();
+		}
+		else if(sensor1==0&&sensor2==0&&sensor3==0&&sensor4==1)
+		{
+		 	fastturnleft();
+		}
+		else if(sensor1==1&&sensor2==0&&sensor3==0&&sensor4==0)
+		{
+		 	fastturnright();
+		}
+		if(reedSwitch())
+			j++;
+		if(j == 2)
+		{
+			zkb_left = 30;
+			zkb_right = 30;
+			i = 0;
+			while(i <= STOP);
+			break;
+		}
+	}
+	while(1);
+
+	
+}
+
+
+void Timer0() interrupt 1
+{	
+	i++;
+	if(i > 2000)
+		i = 0;
+	TH0 = 0XFC;
+	TL0 = 0X18;	
+}
+
+void Timer1() interrupt 3
+{
+	TH1 = 0XFF;
+	TL1 = 0XFF;
+	rate--;
+	if(rate > abs(zkb_left))
+	{
+		lMotor1 = 0;
+		lMotor2 = 0;
+	}
+	else if(rate > 0)
+	{
+		if(zkb_left > 0)
+		{
+			lMotor1 = 0;
+			lMotor2 = 1;
+		}
+		else
+		{
+			lMotor1 = 1;
+			lMotor2 = 0;
+		}
+	}
+	else 
+	{
+		rate = RATE;
+	}
+
+	if(rate > abs(zkb_right))
+	{
+		rMotor1 = 0;
+		rMotor2 = 0;
+	}
+	else if(rate > 0)
+	{
+		if(zkb_right > 0)
+		{
+			rMotor1 = 0;
+			rMotor2 = 1;
+		}
+		else
+		{
+			rMotor1 = 1;
+			rMotor2 = 0;
+		}
+	}
+	else 
+	{
+		rate = RATE;
+	}
+}
